@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    label {
+      display: block;
+    }
+
+    #users {
+      float: left;
+      padding-right: 32px;
+    }
+
+    #room {
+      float: left;
+    }
+  </style>
+</head>
+<body>
+  <label>Name: <input type="text" id="nameInput" /></label>
+  <label>Create room: <input type="text" id="createRoomInput" /></label>
+
+  <h1>Rooms</h1>
+  <ul id="rooms"></ul>
+
+  <h1>Users</h1>
+  <ul id="users"></ul>
+
+  <div id="room">
+    <h1 id="roomName">Room</h1>
+    <pre id="messages"></pre>
+    <label>Message: <input type="text" id="messageInput" /></label>
+  </div>
+
+  <script>
+    class ChatClient {
+
+      on(event, callback) {
+        if (!this.listeners[event]) {
+          this.listeners[event] = []
+        }
+
+        this.listeners[event].push(callback)
+      }
+
+      emit(event, ...args) {
+        const listeners = this.listeners[event] || []
+        listeners.forEach((listener) => listener(...args))
+      }
+
+      constructor(wsUrl) {
+        this.listeners = {}
+        this.socket = new WebSocket('ws://localhost:8080');
+
+        this.socket.addEventListener('open', (event) => {
+          this.onConnected(event)
+        });
+
+        this.socket.addEventListener('message', (event) => {
+          let message = null
+
+          try {
+            message = JSON.parse(event.data)
+          } catch (err) {
+            console.error(err)
+            return
+          }
+
+          if (message === null) {
+            return
+          }
+
+          if (typeof message.type !== 'string') {
+            console.error('Received invalid message', message)
+            return
+          }
+
+          this.onMessage(message)
+        })
+      }
+
+      onConnected() {
+        console.log('Connected to server')
+      }
+
+      onDisconnected() {
+
+      }
+
+      onError() {
+
+      }
+
+      onMessage(message) {
+        console.log('Message from server ', message);
+        this.emit('message', message)
+      }
+
+      send(type, payload) {
+        let message = { type, payload }
+
+        if (typeof payload === 'undefined') {
+          if (typeof type.type !== 'undefined') {
+            message = type
+          }
+        }
+
+        this.socket.send(JSON.stringify(message))
+      }
+
+    }
+
+    window.chatClient = new ChatClient()
+
+    const messagesEle = document.getElementById('messages')
+    const messageInput = document.getElementById('messageInput')
+    const nameInput = document.getElementById('nameInput')
+    const createRoomInput = document.getElementById('createRoomInput')
+    const roomsEle = document.getElementById('rooms')
+    const usersEle = document.getElementById('users')
+    const roomName = document.getElementById('roomName')
+
+    nameInput.addEventListener('keyup', event => {
+      if (event.keyCode !== 13) {
+        return
+      }
+
+      const inputValue =  nameInput.value
+      nameInput.parentElement.remove(nameInput.parentElement)
+
+      chatClient.send('SET_NAME', inputValue)
+    })
+
+    createRoomInput.addEventListener('keyup', event => {
+      if (event.keyCode !== 13) {
+        return
+      }
+
+      const inputValue =  createRoomInput.value
+      createRoomInput.parentElement.remove(createRoomInput.parentElement)
+
+      chatClient.send('CREATE_ROOM', { name: inputValue })
+    })
+
+    messageInput.addEventListener('keyup', (event) => {
+      if (event.keyCode !== 13) {
+        return
+      }
+
+      const inputValue =  messageInput.value
+      messageInput.value = ''
+
+      chatClient.send('SEND_MESSAGE', inputValue)
+    })
+
+    chatClient.on('message', (message) => {
+      if (message.type === 'ROOM_MESSAGE') {
+        messagesEle.innerText += `\n${message.payload.from}: ${message.payload.content}`
+      } else if (message.type === 'MESSAGE_LIST') {
+        message.payload.forEach(({ from, content}) => messagesEle.innerText += `\n${from}: ${content}`)
+      } else if (message.type === 'ROOM_LIST') {
+        roomsEle.innerHTML = ''
+
+        message.payload.forEach(({name}) => {
+          const li = document.createElement('li')
+
+          li.addEventListener('click', () => {
+            chatClient.send('JOIN_ROOM', name)
+            roomsEle.style.display = 'none'
+
+            roomName.textContent = name
+          })
+
+          li.textContent = name
+          roomsEle.appendChild(li)
+        })
+      } else if (message.type === 'USER_LIST') {
+        usersEle.innerHTML = ''
+
+        message.payload.forEach(({name}) => {
+          const li = document.createElement('li')
+          li.textContent = name
+          usersEle.appendChild(li)
+        })
+      }
+
+      console.log(message)
+    })
+  </script>
+</body>
+</html>
