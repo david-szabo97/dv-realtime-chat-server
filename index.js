@@ -24,8 +24,10 @@ chatServer.on('clientDisconnected', (client) => {
   }
 })
 
+let nextMessageId = 1
+let nextRoomId = 1
 const rooms = [
-  new ChatRoom(chatServer, 'Test')
+  new ChatRoom(chatServer, nextRoomId++, 'Test')
 ]
 
 chatServer.on('clientMessage', (client, msg) => {
@@ -37,17 +39,17 @@ chatServer.on('clientMessage', (client, msg) => {
       client.send(new Message(ROOM_LIST, rooms.map(({ name }) => ({ name }))))
       break
     case SEND_MESSAGE:
-      client.room.messages.push({ from: client.name, content: msg.payload })
-      client.room.broadcast(new Message('ROOM_MESSAGE', { from: client.name, content: msg.payload }))
+      const roomMessage = { id: nextMessageId++, createdAt: Date.now(), from: client.name, content: msg.payload }
+      client.room.messages.push(roomMessage)
+      client.room.broadcast(new Message('ROOM_MESSAGE', roomMessage))
       break
     case CREATE_ROOM:
-      const room = new ChatRoom(chatServer, msg.payload.name)
+      const room = new ChatRoom(chatServer, nextRoomId++, msg.payload.name)
       rooms.push(room)
       room.addClient(client)
       client.room = room
 
-      chatServer.broadcast(new Message(ROOM_LIST, rooms.map(({ name }) => ({ name }))), ({ name }) => name)
-
+      chatServer.broadcast(new Message(ROOM_LIST, rooms.map(({ id, name }) => ({ id, name }))), ({ name }) => name)
       break
     case JOIN_ROOM:
       const roomByName = rooms.find(room => room.name === msg.payload)
@@ -59,8 +61,8 @@ chatServer.on('clientMessage', (client, msg) => {
       roomByName.addClient(client)
       client.room = roomByName
 
-      client.room.broadcast(new Message(USER_LIST, client.room.clients.map(({ name }) => ({ name }))))
-      client.send(new Message(MESSAGE_LIST, client.room.messages.map(({ from, content }) => ({ from, content }))))
+      client.room.broadcast(new Message(USER_LIST, client.room.clients.map(({ id, name }) => ({ id, name }))))
+      client.send(new Message(MESSAGE_LIST, client.room.messages.map(({ id, createdAt, from, content }) => ({ id, createdAt, from, content }))))
 
       break
   }

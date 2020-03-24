@@ -1,13 +1,14 @@
 const EventEmitter = require('events')
 
 class ChatRoom extends EventEmitter {
-  constructor (server, name) {
+  constructor (server, id, name) {
     super()
 
     this.server = server
     this.clients = []
     this.messages = []
 
+    this.id = id
     this.name = name
   }
 
